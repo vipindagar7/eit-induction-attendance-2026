@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Attendance from "@/models/Attendance";
+import { getNextSerial } from "@/models/Counter";
 import { appendAttendanceToSheet } from "@/lib/googleSheets";
 
 export async function POST(req: NextRequest) {
@@ -23,7 +24,6 @@ export async function POST(req: NextRequest) {
 
     await connectDB();
 
-    // Block a second attendance mark from the same mobile number.
     const existing = await Attendance.findOne({ mobile });
     if (existing) {
       return NextResponse.json(
@@ -33,9 +33,10 @@ export async function POST(req: NextRequest) {
     }
 
     const record = await Attendance.create({ name, fatherName, mobile, branch });
+    const serial = await getNextSerial("attendance");
 
     try {
-      await appendAttendanceToSheet(record);
+      await appendAttendanceToSheet(record, serial);
     } catch (sheetErr) {
       console.error("[google-sheets] failed to append row:", sheetErr);
     }
@@ -45,8 +46,6 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err: unknown) {
-    // Mongo duplicate-key error as a fallback safety net (race condition
-    // between the findOne check above and the create call).
     if (typeof err === "object" && err !== null && "code" in err && err.code === 11000) {
       return NextResponse.json(
         { success: false, message: "This mobile number has already marked attendance." },
@@ -59,7 +58,6 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-
 }
 
 export async function GET() {

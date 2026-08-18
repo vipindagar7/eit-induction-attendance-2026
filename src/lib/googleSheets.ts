@@ -86,31 +86,32 @@ async function getNextSerialNumber(): Promise<number> {
   return dataRowCount + 1;
 }
 
-export async function appendAttendanceToSheet(record: IAttendance) {
+export async function appendAttendanceToSheet(record: IAttendance, serial: number) {
   if (!SHEET_ID) {
     throw new Error("GOOGLE_SHEET_ID is not set in .env.local.");
   }
 
-  await ensureHeaderRow();
-  const serial = await getNextSerialNumber();
-  const sheets = await getSheetsClient();
+  enqueueSheetWrite(async () => {
+    await ensureHeaderRow();
+    const sheets = await getSheetsClient();
 
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: SHEET_ID,
-    range: `${SHEET_TAB}!A:F`,
-    valueInputOption: "USER_ENTERED",
-    insertDataOption: "INSERT_ROWS",
-    requestBody: {
-      values: [
-        [
-          serial,
-          record.name,
-          record.fatherName,
-          record.mobile,
-          record.branch,
-          new Date().toLocaleString("en-IN"),
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_TAB}!A:F`,
+      valueInputOption: "USER_ENTERED",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: {
+        values: [
+          [
+            serial, // real integer, computed atomically in MongoDB — no formula
+            record.name,
+            record.fatherName,
+            record.mobile,
+            record.branch,
+            new Date().toLocaleString("en-IN"),
+          ],
         ],
-      ],
-    },
+      },
+    });
   });
 }
