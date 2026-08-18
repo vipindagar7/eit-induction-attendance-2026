@@ -73,17 +73,21 @@ async function ensureHeaderRow() {
   headerEnsured = true;
 }
 
-async function getNextSerialNumber(): Promise<number> {
-  const sheets = await getSheetsClient();
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHEET_ID,
-    range: `${SHEET_TAB}!A:A`,
-  });
+/**
+ * Serializes all Sheets API writes through this Node process so we never
+ * have more than one append in flight at a time — keeps us under Google's
+ * rate limits and avoids interleaved/garbled writes under concurrent load.
+ * The serial number itself is no longer computed here (see route.ts) —
+ * it's generated atomically in MongoDB before this is ever called, so
+ * duplicate S.No values are no longer possible even under heavy load.
+ */
+let sheetQueue: Promise<unknown> = Promise.resolve();
 
-  const rows = res.data.values || [];
-  // rows[0] is the header, so number of data rows = rows.length - 1 (if header exists)
-  const dataRowCount = Math.max(rows.length - 1, 0);
-  return dataRowCount + 1;
+function enqueueSheetWrite(task: () => Promise<void>) {
+  sheetQueue = sheetQueue.then(task).catch((err) => {
+    console.error("[google-sheets] queued write failed:", err);
+  });
+  return sheetQueue;
 }
 
 export async function appendAttendanceToSheet(record: IAttendance, serial: number) {
@@ -103,7 +107,7 @@ export async function appendAttendanceToSheet(record: IAttendance, serial: numbe
       requestBody: {
         values: [
           [
-            serial, // real integer, computed atomically in MongoDB — no formula
+            serial, // real integer from MongoDB's atomic counter — no formula
             record.name,
             record.fatherName,
             record.mobile,
