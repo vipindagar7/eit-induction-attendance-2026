@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-APP_NAME="attendance-app"
-APP_DIR="/home/$(whoami)/apps/attendance-app"   # <-- change to your actual deploy path
-REPO_URL="git@github.com:<your-username>/<your-repo>.git"  # <-- fill in your repo
+APP_NAME="eit-induction-attendance-2026"
+APP_DIR="/var/www/eit-induction-attendance-2026"   # <-- change to your actual deploy path
+REPO_URL="https://github.com/vipindagar7/eit-induction-attendance-2026.git"  # <-- fill in your repo
 BRANCH="main"
 
 echo "==> Deploying $APP_NAME"

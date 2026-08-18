@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: "attendance-app",
+      name: "eit-induction-attendance-2026",
       cwd: __dirname,
       script: "npm",
       args: "start",
