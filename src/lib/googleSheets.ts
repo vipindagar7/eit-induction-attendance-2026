@@ -17,7 +17,7 @@ import { IAttendance } from "@/models/Attendance";
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID as string;
 const SHEET_TAB = process.env.GOOGLE_SHEET_TAB || "Attendance";
-const HEADER = [git remote add origin https://github.com/vipindagar7/eit-induction-attendance.git];
+const HEADER = ["S.No", "Name", "Father's Name", "Mobile Number", "Branch", "Timestamp"];
 
 function getCredentials() {
   const inlineKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
