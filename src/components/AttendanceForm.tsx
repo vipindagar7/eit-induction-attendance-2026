@@ -12,6 +12,7 @@ const REDIRECT_URL = "https://www.eitfaridabad.com";
 export default function AttendanceForm() {
   const [step, setStep] = useState<Step>("form");
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   const [name, setName] = useState("");
   const [fatherName, setFatherName] = useState("");
@@ -28,41 +29,80 @@ export default function AttendanceForm() {
       return () => clearTimeout(timer);
     }
   }, [step]);
+  useEffect(() => {
+  if (resendCooldown <= 0) return;
+  const timer = setInterval(() => {
+    setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+  }, 1000);
+  return () => clearInterval(timer);
+}, [resendCooldown]);
 
-  const handleSendOtp = async () => {
-    if (!name || !fatherName || !mobile || !branch) {
-      toast.error("Please fill all the fields first.");
+
+
+ const handleSendOtp = async () => {
+  if (!name || !fatherName || !mobile || !branch) {
+    toast.error("Please fill all the fields first.");
+    return;
+  }
+  if (mobile.trim().length < 10) {
+    toast.error("Enter a valid mobile number.");
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const res = await fetch("/api/otp/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mobile }),
+    });
+    const data = await res.json();
+
+    if (res.status === 409 || data.alreadyMarked) {
+      setStep("already");
       return;
     }
-    if (mobile.trim().length < 10) {
-      toast.error("Enter a valid mobile number.");
+
+    if (!res.ok) throw new Error(data.message);
+
+    toast.success(data.message || "OTP sent!");
+    setResendCooldown(30);
+    setStep("otp");
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Failed to send OTP.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+const handleResendOtp = async () => {
+  if (resendCooldown > 0) return;
+
+  setLoading(true);
+  try {
+    const res = await fetch("/api/otp/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mobile }),
+    });
+    const data = await res.json();
+
+    if (res.status === 409 || data.alreadyMarked) {
+      setStep("already");
       return;
     }
 
-    setLoading(true);
-    try {
-      const res = await fetch("/api/otp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile }),
-      });
-      const data = await res.json();
+    if (!res.ok) throw new Error(data.message);
 
-      if (res.status === 409 || data.alreadyMarked) {
-        setStep("already");
-        return;
-      }
-
-      if (!res.ok) throw new Error(data.message);
-
-      toast.success(data.message || "OTP sent!");
-      setStep("otp");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send OTP.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    toast.success("OTP resent!");
+    setResendCooldown(30);
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Failed to resend OTP.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleVerifyOtp = async () => {
     if (!otp) {
@@ -182,47 +222,55 @@ export default function AttendanceForm() {
           </motion.div>
         )}
 
-        {step === "otp" && (
-          <motion.div
-            key="otp"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.35 }}
-            className="space-y-5"
-          >
-            <div>
-              <h3 className="text-lg font-semibold mb-1">Verify OTP</h3>
-              <p className="text-sm text-white/60">We&apos;ve sent a code to {mobile}</p>
-            </div>
+       {step === "otp" && (
+  <motion.div
+    key="otp"
+    initial={{ opacity: 0, x: 20 }}
+    animate={{ opacity: 1, x: 0 }}
+    exit={{ opacity: 0, x: -20 }}
+    transition={{ duration: 0.35 }}
+    className="space-y-5"
+  >
+    <div>
+      <h3 className="text-lg font-semibold mb-1">Verify OTP</h3>
+      <p className="text-sm text-white/60">We&apos;ve sent a code to {mobile}</p>
+    </div>
 
-            <Field label="Enter OTP">
-              <input
-                className="glass-input w-full rounded-xl px-4 py-3 tracking-[0.5em] text-center"
-                placeholder="------"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              />
-            </Field>
+    <Field label="Enter OTP">
+      <input
+        className="glass-input w-full rounded-xl px-4 py-3 tracking-[0.5em] text-center"
+        placeholder="------"
+        maxLength={6}
+        value={otp}
+        onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+      />
+    </Field>
 
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={handleVerifyOtp}
-              disabled={loading}
-              className="glass-button w-full rounded-xl py-3 font-semibold"
-            >
-              {loading ? "Verifying..." : "Confirm & Submit"}
-            </motion.button>
+    <motion.button
+      whileTap={{ scale: 0.97 }}
+      onClick={handleVerifyOtp}
+      disabled={loading}
+      className="glass-button w-full rounded-xl py-3 font-semibold"
+    >
+      {loading ? "Verifying..." : "Confirm & Submit"}
+    </motion.button>
 
-            <button
-              onClick={() => setStep("form")}
-              className="w-full text-sm text-white/60 hover:text-white transition"
-            >
-              ← Edit details
-            </button>
-          </motion.div>
-        )}
+    <button
+      onClick={handleResendOtp}
+      disabled={resendCooldown > 0 || loading}
+      className="w-full text-sm text-white/60 hover:text-white transition disabled:text-white/30 disabled:hover:text-white/30"
+    >
+      {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : "Resend OTP"}
+    </button>
+
+    <button
+      onClick={() => setStep("form")}
+      className="w-full text-sm text-white/60 hover:text-white transition"
+    >
+      ← Edit details
+    </button>
+  </motion.div>
+)}
 
         {step === "success" && (
           <motion.div
