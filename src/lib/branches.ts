@@ -1,15 +1,16 @@
+
 export const BRANCHES = [
   "Computer Science & Engineering (CSE)",
   "Civil Engineering (CE)",
   "Electronics & Communication Engineering (ECE)",
   "Mechanical Engineering (ME)",
   "Mechatronics",
-  "Artificial Intelligence & Robotics",
+  "Robotics & Artificial Intelligence",
   "B.Tech CSE (Artificial Intelligence & Machine Learning)",
   "B.Tech (Artificial Intelligence & Data Science)",
   "B.Tech CSE (Data Science)",
   "B.Tech CSE (Cyber Security)",
-  "B.Tech CSE (Block Chain Technology, Cyber Security, Internet Of Things)",
+  "Internet of Things and Cyber Security including Blockchain Technology",
   "M.Tech in Computer Science & Engineering (CSE)",
   "M.Tech in Mechanical Engineering (ME)",
   "BCA (Hons)",
