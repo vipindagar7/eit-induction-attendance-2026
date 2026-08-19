@@ -4,3 +4,7 @@ node_modules
 service-account.json
 .env
 data/registered-students.xlsx
+upload
+/upload
+upload/page.tsx
+/upload/page.tsx
