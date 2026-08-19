@@ -1,7 +1,5 @@
 import mongoose, { Schema, models, model } from "mongoose";
 
-// Single-document collection used purely to hand out atomically
-// incrementing serial numbers, independent of MongoDB _id or timing.
 interface ICounter {
   _id: string;
   seq: number;

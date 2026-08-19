@@ -2,22 +2,24 @@ import { google } from "googleapis";
 import { IAttendance } from "@/models/Attendance";
 
 // Uses a Google service account to append rows to a Sheet only you own.
-// Setup (one-time):
-//   1. Go to console.cloud.google.com -> create a project (or reuse one).
-//   2. Enable the "Google Sheets API".
-//   3. Create a Service Account -> generate a JSON key -> download it.
-//   4. Put the JSON file at the path in GOOGLE_SERVICE_ACCOUNT_KEY_PATH
-//      (or paste its contents into GOOGLE_SERVICE_ACCOUNT_KEY as a one-line JSON string).
-//   5. Open your Google Sheet -> Share -> add the service account's
-//      "client_email" (looks like xxx@xxx.iam.gserviceaccount.com) as an Editor.
-//      This is what lets the app write to it while the sheet itself stays
-//      private to you (the service account is not a public share).
-//   6. Copy the Sheet ID from its URL into GOOGLE_SHEET_ID.
-//      https://docs.google.com/spreadsheets/d/<THIS_PART>/edit
+// Two tabs are used: "Registered" and "Unregistered" — appendAttendanceToSheet
+// picks the tab based on the `tab` argument passed in from the API route.
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID as string;
-const SHEET_TAB = process.env.GOOGLE_SHEET_TAB || "Attendance";
-const HEADER = ["S.No", "Name", "Father's Name", "Mobile Number", "Branch", "Timestamp"];
+const HEADER = [
+  "S.No",
+  "Name",
+  "Father's Name",
+  "Mobile Number",
+  "Branch",
+  "Coming Alone / With Someone",
+  "Members (Name - Relation)",
+  "Total People",
+  "Transport",
+  "Timestamp",
+];
+
+export type SheetTab = "Registered" | "Unregistered";
 
 function getCredentials() {
   const inlineKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
@@ -48,15 +50,30 @@ async function getSheetsClient() {
   return google.sheets({ version: "v4", auth: client });
 }
 
-let headerEnsured = false;
+const headerEnsuredForTab = new Set<string>();
 
-async function ensureHeaderRow() {
-  if (headerEnsured) return;
+async function ensureHeaderRow(tab: SheetTab) {
+  if (headerEnsuredForTab.has(tab)) return;
   const sheets = await getSheetsClient();
+
+  // Make sure the tab itself exists; create it if not.
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+  const existingTabs = (meta.data.sheets || []).map(
+    (s) => s.properties?.title
+  );
+
+  if (!existingTabs.includes(tab)) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title: tab } } }],
+      },
+    });
+  }
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${SHEET_TAB}!A1:F1`,
+    range: `${tab}!A1:J1`,
   });
 
   const hasHeader = res.data.values && res.data.values.length > 0;
@@ -64,22 +81,18 @@ async function ensureHeaderRow() {
   if (!hasHeader) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_TAB}!A1:F1`,
+      range: `${tab}!A1:J1`,
       valueInputOption: "RAW",
       requestBody: { values: [HEADER] },
     });
   }
 
-  headerEnsured = true;
+  headerEnsuredForTab.add(tab);
 }
 
 /**
  * Serializes all Sheets API writes through this Node process so we never
- * have more than one append in flight at a time — keeps us under Google's
- * rate limits and avoids interleaved/garbled writes under concurrent load.
- * The serial number itself is no longer computed here (see route.ts) —
- * it's generated atomically in MongoDB before this is ever called, so
- * duplicate S.No values are no longer possible even under heavy load.
+ * have more than one append in flight at a time.
  */
 let sheetQueue: Promise<unknown> = Promise.resolve();
 
@@ -90,29 +103,48 @@ function enqueueSheetWrite(task: () => Promise<void>) {
   return sheetQueue;
 }
 
-export async function appendAttendanceToSheet(record: IAttendance, serial: number) {
+export async function appendAttendanceToSheet(
+  record: IAttendance,
+  serial: number,
+  tab: SheetTab
+) {
   if (!SHEET_ID) {
     throw new Error("GOOGLE_SHEET_ID is not set in .env.local.");
   }
 
+  const membersText = record.members?.length
+    ? record.members.map((m) => `${m.name} (${m.relation})`).join(", ")
+    : "0";
+  const totalPeople = record.isComing
+    ? 1 + (record.members?.length || 0)
+    : 0;
+
   enqueueSheetWrite(async () => {
-    await ensureHeaderRow();
+    await ensureHeaderRow(tab);
     const sheets = await getSheetsClient();
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_TAB}!A:F`,
+      range: `${tab}!A:J`,
       valueInputOption: "USER_ENTERED",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
         values: [
           [
-            serial, // real integer from MongoDB's atomic counter — no formula
+            serial,
             record.name,
             record.fatherName,
             record.mobile,
             record.branch,
-            new Date().toLocaleString("en-IN"),
+            !record.isComing
+              ? "Not Coming"
+              : record.comingAlone
+                ? "Alone"
+                : "With Someone",
+            membersText,
+            totalPeople,
+            record.wantsTransport ? `Yes - ${record.transportStation}` : "No",
+            new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
           ],
         ],
       },

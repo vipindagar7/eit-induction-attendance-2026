@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendOtp } from "@/lib/otp";
 import { connectDB } from "@/lib/mongodb";
 import Attendance from "@/models/Attendance";
+import { getISTDayRange } from "@/lib/dateRange";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,10 +16,20 @@ export async function POST(req: NextRequest) {
     }
 
     await connectDB();
-    const existing = await Attendance.findOne({ mobile });
+
+    const { start, end } = getISTDayRange();
+    const existing = await Attendance.findOne({
+      mobile,
+      createdAt: { $gte: start, $lt: end },
+    });
+
     if (existing) {
       return NextResponse.json(
-        { success: false, message: "This mobile number has already marked attendance.", alreadyMarked: true },
+        {
+          success: false,
+          message: "This mobile number has already marked attendance today.",
+          alreadyMarked: true,
+        },
         { status: 409 }
       );
     }
